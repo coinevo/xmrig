@@ -119,10 +119,7 @@ static AlgoName const algorithm_names[] = {
     { "randomx/sfx",               "rx/sfx",           Algorithm::RX_SFX          },
     { "RandomSFX",                 nullptr,            Algorithm::RX_SFX          },
     { "randomx/evo",               "rx/evo",           Algorithm::RX_EVO          },
-    { "RandomXC",                  nullptr,            Algorithm::RX_EVO          },
-
-
-
+    { "RandomEVO",                 nullptr,            Algorithm::RX_EVO          },
 #   endif
 #   ifdef XMRIG_ALGO_ARGON2
     { "argon2/chukwa",             nullptr,            Algorithm::AR2_CHUKWA      },
@@ -185,8 +182,8 @@ size_t xmrig::Algorithm::l3() const
     if (f == RANDOM_X) {
         switch (m_id) {
         case RX_0:
-        case RX_LOKI:
         case RX_EVO:
+        case RX_LOKI:
         case RX_SFX:
             return oneMiB * 2;
 

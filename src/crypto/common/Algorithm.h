@@ -66,8 +66,8 @@ public:
         CN_PICO_TLO,   // "cn-pico/tlo"      CryptoNight-Pico (TLO)
         RX_0,          // "rx/0"             RandomX (reference configuration).
         RX_WOW,        // "rx/wow"           RandomWOW (Wownero).
-        RX_EVO,        // "rx/evo"           RandomEVO/RandomXC (Coinevo).
         RX_LOKI,       // "rx/loki"          RandomXL (Loki).
+        RX_EVO,       // "rx/evo"          RandomEVO (Coinevo).
         RX_ARQ,        // "rx/arq"           RandomARQ (Arqma).
         RX_SFX,        // "rx/sfx"           RandomSFX (Safex Cash).
         AR2_CHUKWA,    // "argon2/chukwa"    Argon2id (Chukwa).

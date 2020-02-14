@@ -187,8 +187,8 @@ struct RandomX_ConfigurationSafex : public RandomX_ConfigurationBase { RandomX_C
 
 extern RandomX_ConfigurationMonero RandomX_MoneroConfig;
 extern RandomX_ConfigurationWownero RandomX_WowneroConfig;
-extern RandomX_ConfigurationCoinevo RandomX_CoinevoConfig;
 extern RandomX_ConfigurationLoki RandomX_LokiConfig;
+extern RandomX_ConfigurationCoinevo RandomX_CoinevoConfig;
 extern RandomX_ConfigurationArqma RandomX_ArqmaConfig;
 extern RandomX_ConfigurationSafex RandomX_SafexConfig;
 

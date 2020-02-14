@@ -83,14 +83,9 @@ RandomX_ConfigurationLoki::RandomX_ConfigurationLoki()
 	RANDOMX_FREQ_IADD_RS = 25;
 	RANDOMX_FREQ_CBRANCH = 16;
 }
-
 RandomX_ConfigurationCoinevo::RandomX_ConfigurationCoinevo()
 {
-	ArgonSalt = "RandomXC\x08";
-	ProgramSize = 320;
-	ProgramCount = 7;
-	RANDOMX_FREQ_IADD_RS = 25;
-	RANDOMX_FREQ_CBRANCH = 16;
+        ArgonSalt = "RandomEVO\x08";
 }
 
 
@@ -297,8 +292,8 @@ void RandomX_ConfigurationBase::Apply()
 
 RandomX_ConfigurationMonero RandomX_MoneroConfig;
 RandomX_ConfigurationWownero RandomX_WowneroConfig;
-RandomX_ConfigurationCoinevo RandomX_CoinevoConfig;
 RandomX_ConfigurationLoki RandomX_LokiConfig;
+RandomX_ConfigurationCoinevo RandomX_CoinevoConfig;
 RandomX_ConfigurationArqma RandomX_ArqmaConfig;
 RandomX_ConfigurationSafex RandomX_SafexConfig;
 
