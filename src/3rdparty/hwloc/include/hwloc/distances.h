@@ -87,12 +87,7 @@ enum hwloc_distances_kind_e {
    * Such values are currently ignored for distance-based grouping.
    * \hideinitializer
    */
-  HWLOC_DISTANCES_KIND_MEANS_BANDWIDTH = (1UL<<3),
-
-  /** \brief This distances structure covers objects of different types.
-   * \hideinitializer
-   */
-  HWLOC_DISTANCES_KIND_HETEROGENEOUS_TYPES = (1UL<<4)
+  HWLOC_DISTANCES_KIND_MEANS_BANDWIDTH = (1UL<<3)
 };
 
 /** \brief Retrieve distance matrices.
@@ -136,32 +131,20 @@ hwloc_distances_get_by_depth(hwloc_topology_t topology, int depth,
  *
  * Identical to hwloc_distances_get() with the additional \p type filter.
  */
-HWLOC_DECLSPEC int
+static __hwloc_inline int
 hwloc_distances_get_by_type(hwloc_topology_t topology, hwloc_obj_type_t type,
 			    unsigned *nr, struct hwloc_distances_s **distances,
-			    unsigned long kind, unsigned long flags);
+			    unsigned long kind, unsigned long flags)
+{
+  int depth = hwloc_get_type_depth(topology, type);
+  if (depth == HWLOC_TYPE_DEPTH_UNKNOWN || depth == HWLOC_TYPE_DEPTH_MULTIPLE) {
+    *nr = 0;
+    return 0;
+  }
+  return hwloc_distances_get_by_depth(topology, depth, nr, distances, kind, flags);
+}
 
-/** \brief Retrieve a distance matrix with the given name.
- *
- * Usually only one distances structure may match a given name.
- */
-HWLOC_DECLSPEC int
-hwloc_distances_get_by_name(hwloc_topology_t topology, const char *name,
-			    unsigned *nr, struct hwloc_distances_s **distances,
-			    unsigned long flags);
-
-/** \brief Get a description of what a distances structure contains.
- *
- * For instance "NUMALatency" for hardware-provided NUMA distances (ACPI SLIT),
- * or NULL if unknown.
- */
-HWLOC_DECLSPEC const char *
-hwloc_distances_get_name(hwloc_topology_t topology, struct hwloc_distances_s *distances);
-
-/** \brief Release a distance matrix structure previously returned by hwloc_distances_get().
- *
- * \note This function is not required if the structure is removed with hwloc_distances_release_remove().
- */
+/** \brief Release a distance matrix structure previously returned by hwloc_distances_get(). */
 HWLOC_DECLSPEC void
 hwloc_distances_release(hwloc_topology_t topology, struct hwloc_distances_s *distances);
 
@@ -238,11 +221,11 @@ enum hwloc_distances_add_flag_e {
  * The distance from object i to object j is in slot i*nbobjs+j.
  *
  * \p kind specifies the kind of distance as a OR'ed set of ::hwloc_distances_kind_e.
- * Kind ::HWLOC_DISTANCES_KIND_HETEROGENEOUS_TYPES will be automatically added
- * if objects of different types are given.
  *
  * \p flags configures the behavior of the function using an optional OR'ed set of
  * ::hwloc_distances_add_flag_e.
+ *
+ * Objects must be of the same type. They cannot be of type Group.
  */
 HWLOC_DECLSPEC int hwloc_distances_add(hwloc_topology_t topology,
 				       unsigned nbobjs, hwloc_obj_t *objs, hwloc_uint64_t *values,
@@ -254,7 +237,7 @@ HWLOC_DECLSPEC int hwloc_distances_add(hwloc_topology_t topology,
  * gathered through the OS.
  *
  * If these distances were used to group objects, these additional
- * Group objects are not removed from the topology.
+ *Group objects are not removed from the topology.
  */
 HWLOC_DECLSPEC int hwloc_distances_remove(hwloc_topology_t topology);
 
@@ -276,12 +259,6 @@ hwloc_distances_remove_by_type(hwloc_topology_t topology, hwloc_obj_type_t type)
     return 0;
   return hwloc_distances_remove_by_depth(topology, depth);
 }
-
-/** \brief Release and remove the given distance matrice from the topology.
- *
- * This function includes a call to hwloc_distances_release().
- */
-HWLOC_DECLSPEC int hwloc_distances_release_remove(hwloc_topology_t topology, struct hwloc_distances_s *distances);
 
 /** @} */
 

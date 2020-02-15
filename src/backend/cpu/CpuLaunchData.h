@@ -60,7 +60,6 @@ public:
     const Assembly assembly;
     const bool hugePages;
     const bool hwAES;
-    const bool yield;
     const int priority;
     const int64_t affinity;
     const Miner *miner;

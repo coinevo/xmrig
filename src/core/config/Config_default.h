@@ -50,7 +50,6 @@ R"===(
     "colors": true,
     "randomx": {
         "init": -1,
-        "mode": "auto",
         "numa": true
     },
     "cpu": {
@@ -59,7 +58,6 @@ R"===(
         "hw-aes": null,
         "priority": null,
         "memory-pool": false,
-        "yield": true,
         "max-threads-hint": 100,
         "asm": true,
         "argon2-impl": null,

@@ -48,7 +48,7 @@ public:
 
     Process(int argc, char **argv);
 
-    static String location(Location location, const char *fileName = nullptr);
+    String location(Location location, const char *fileName = nullptr) const;
 
     inline const Arguments &arguments() const { return m_arguments; }
 

@@ -1,6 +1,6 @@
 # XMRig
 
-**:warning: [Monero changed PoW algorithm to RandomX on November 30.](https://github.com/xmrig/xmrig/issues/1204)**
+**:warning: [Monero will change PoW algorithm to RandomX on November 30.](https://github.com/xmrig/xmrig/issues/1204)**
 
 [![Github All Releases](https://img.shields.io/github/downloads/xmrig/xmrig/total.svg)](https://github.com/xmrig/xmrig/releases)
 [![GitHub release](https://img.shields.io/github/release/xmrig/xmrig/all.svg)](https://github.com/xmrig/xmrig/releases)
@@ -16,7 +16,7 @@ XMRig High performance, open source, cross platform RandomX, CryptoNight and Arg
 - **OpenCL** for AMD GPUs.
 - **CUDA** for NVIDIA GPUs via external [CUDA plugin](https://github.com/xmrig/xmrig-cuda).
 
-<img src="doc/screenshot_v5_2_0.png" width="833" >
+<img src="doc/screenshot.png" width="808" >
 
 ## Download
 * Binary releases: https://github.com/xmrig/xmrig/releases
@@ -38,7 +38,7 @@ Network:
   -u, --user=USERNAME           username for mining server
   -p, --pass=PASSWORD           password for mining server
   -O, --userpass=U:P            username:password pair for mining server
-  -k, --keepalive               send keepalive packet for prevent timeout (needs pool support)
+  -k, --keepalive               send keepalived packet for prevent timeout (needs pool support)
       --nicehash                enable nicehash.com support
       --rig-id=ID               rig identifier for pool-side statistics (needs pool support)
       --tls                     enable SSL/TLS support (needs pool support)
@@ -59,15 +59,10 @@ CPU backend:
       --cpu-priority            set process priority (0 idle, 2 normal to 5 highest)
       --cpu-max-threads-hint=N  maximum CPU threads count (in percentage) hint for autoconfig
       --cpu-memory-pool=N       number of 2 MB pages for persistent memory pool, -1 (auto), 0 (disable)
-      --cpu-no-yield            prefer maximum hashrate rather than system response/stability
       --no-huge-pages           disable huge pages support
       --asm=ASM                 ASM optimizations, possible values: auto, none, intel, ryzen, bulldozer
-      --randomx-init=N          thread count to initialize RandomX dataset
+      --randomx-init=N          threads count to initialize RandomX dataset
       --randomx-no-numa         disable NUMA support for RandomX
-      --randomx-mode=MODE       RandomX mode: auto, fast, light
-      --randomx-1gb-pages       use 1GB hugepages for dataset (Linux only)
-      --randomx-wrmsr=N         write custom value (0-15) to Intel MSR register 0x1a4 or disable MSR mod (-1)
-      --randomx-no-rdmsr        disable reverting initial MSR values on exit
 
 API:
       --api-worker-id=ID        custom worker-id for API
@@ -89,8 +84,6 @@ CUDA backend:
       --cuda                    enable CUDA mining backend
       --cuda-loader=PATH        path to CUDA plugin (xmrig-cuda.dll or libxmrig-cuda.so)
       --cuda-devices=N          comma separated list of CUDA devices to use
-      --cuda-bfactor-hint=N     bfactor hint for autoconfig (0-12)
-      --cuda-bsleep-hint=N      bsleep hint for autoconfig
       --no-nvml                 disable NVML (NVIDIA Management Library) support
 
 Logging:
@@ -99,7 +92,6 @@ Logging:
       --print-time=N            print hashrate report every N seconds
       --health-print-time=N     print health report every N seconds
       --no-color                disable colored output
-      --verbose                 verbose output
 
 Misc:
   -c, --config=FILE             load a JSON-format configuration file

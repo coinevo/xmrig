@@ -1,21 +1,18 @@
 /*
- * Copyright © 2010-2019 Inria.  All rights reserved.
+ * Copyright © 2010-2018 Inria.  All rights reserved.
  * Copyright © 2011-2012 Université Bordeaux
  * Copyright © 2011 Cisco Systems, Inc.  All rights reserved.
  * See COPYING in top-level directory.
  */
 
-#include "private/autogen/config.h"
-#include "hwloc.h"
-#include "private/private.h"
-#include "private/debug.h"
-#include "private/misc.h"
+#include <private/autogen/config.h>
+#include <hwloc.h>
+#include <private/private.h>
+#include <private/debug.h>
+#include <private/misc.h>
 
 #include <float.h>
 #include <math.h>
-
-static struct hwloc_internal_distances_s *
-hwloc__internal_distances_from_public(hwloc_topology_t topology, struct hwloc_distances_s *distances);
 
 /******************************************************
  * Global init, prepare, destroy, dup
@@ -73,8 +70,6 @@ void hwloc_internal_distances_prepare(struct hwloc_topology *topology)
 
 static void hwloc_internal_distances_free(struct hwloc_internal_distances_s *dist)
 {
-  free(dist->name);
-  free(dist->different_types);
   free(dist->indexes);
   free(dist->objs);
   free(dist->values);
@@ -101,35 +96,15 @@ static int hwloc_internal_distances_dup_one(struct hwloc_topology *new, struct h
   newdist = hwloc_tma_malloc(tma, sizeof(*newdist));
   if (!newdist)
     return -1;
-  if (olddist->name) {
-    newdist->name = hwloc_tma_strdup(tma, olddist->name);
-    if (!newdist->name) {
-      assert(!tma || !tma->dontfree); /* this tma cannot fail to allocate */
-      hwloc_internal_distances_free(newdist);
-      return -1;
-    }
-  } else {
-    newdist->name = NULL;
-  }
 
-  if (olddist->different_types) {
-    newdist->different_types = hwloc_tma_malloc(tma, nbobjs * sizeof(*newdist->different_types));
-    if (!newdist->different_types) {
-      assert(!tma || !tma->dontfree); /* this tma cannot fail to allocate */
-      hwloc_internal_distances_free(newdist);
-      return -1;
-    }
-    memcpy(newdist->different_types, olddist->different_types, nbobjs * sizeof(*newdist->different_types));
-  } else
-    newdist->different_types = NULL;
-  newdist->unique_type = olddist->unique_type;
+  newdist->type = olddist->type;
   newdist->nbobjs = nbobjs;
   newdist->kind = olddist->kind;
   newdist->id = olddist->id;
 
   newdist->indexes = hwloc_tma_malloc(tma, nbobjs * sizeof(*newdist->indexes));
   newdist->objs = hwloc_tma_calloc(tma, nbobjs * sizeof(*newdist->objs));
-  newdist->iflags = olddist->iflags & ~HWLOC_INTERNAL_DIST_FLAG_OBJS_VALID; /* must be revalidated after dup() */
+  newdist->objs_are_valid = 0;
   newdist->values = hwloc_tma_malloc(tma, nbobjs*nbobjs * sizeof(*newdist->values));
   if (!newdist->indexes || !newdist->objs || !newdist->values) {
     assert(!tma || !tma->dontfree); /* this tma cannot fail to allocate */
@@ -175,10 +150,6 @@ int hwloc_distances_remove(hwloc_topology_t topology)
     errno = EINVAL;
     return -1;
   }
-  if (topology->adopted_shmem_addr) {
-    errno = EPERM;
-    return -1;
-  }
   hwloc_internal_distances_destroy(topology);
   return 0;
 }
@@ -192,10 +163,6 @@ int hwloc_distances_remove_by_depth(hwloc_topology_t topology, int depth)
     errno = EINVAL;
     return -1;
   }
-  if (topology->adopted_shmem_addr) {
-    errno = EPERM;
-    return -1;
-  }
 
   /* switch back to types since we don't support groups for now */
   type = hwloc_get_depth_type(topology, depth);
@@ -207,7 +174,7 @@ int hwloc_distances_remove_by_depth(hwloc_topology_t topology, int depth)
   next = topology->first_dist;
   while ((dist = next) != NULL) {
     next = dist->next;
-    if (dist->unique_type == type) {
+    if (dist->type == type) {
       if (next)
 	next->prev = dist->prev;
       else
@@ -223,27 +190,6 @@ int hwloc_distances_remove_by_depth(hwloc_topology_t topology, int depth)
   return 0;
 }
 
-int hwloc_distances_release_remove(hwloc_topology_t topology,
-				   struct hwloc_distances_s *distances)
-{
-  struct hwloc_internal_distances_s *dist = hwloc__internal_distances_from_public(topology, distances);
-  if (!dist) {
-    errno = EINVAL;
-    return -1;
-  }
-  if (dist->prev)
-    dist->prev->next = dist->next;
-  else
-    topology->first_dist = dist->next;
-  if (dist->next)
-    dist->next->prev = dist->prev;
-  else
-    topology->last_dist = dist->prev;
-  hwloc_internal_distances_free(dist);
-  hwloc_distances_release(topology, distances);
-  return 0;
-}
-
 /******************************************************
  * Add distances to the topology
  */
@@ -255,34 +201,17 @@ hwloc__groups_by_distances(struct hwloc_topology *topology, unsigned nbobjs, str
  * the caller gives us the distances and objs pointers, we'll free them later.
  */
 static int
-hwloc_internal_distances__add(hwloc_topology_t topology, const char *name,
-			      hwloc_obj_type_t unique_type, hwloc_obj_type_t *different_types,
-			      unsigned nbobjs, hwloc_obj_t *objs, uint64_t *indexes, uint64_t *values,
-			      unsigned long kind, unsigned iflags)
+hwloc_internal_distances__add(hwloc_topology_t topology,
+			      hwloc_obj_type_t type, unsigned nbobjs, hwloc_obj_t *objs, uint64_t *indexes, uint64_t *values,
+			      unsigned long kind)
 {
-  struct hwloc_internal_distances_s *dist;
-
-  if (different_types) {
-    kind |= HWLOC_DISTANCES_KIND_HETEROGENEOUS_TYPES; /* the user isn't forced to give it */
-  } else if (kind & HWLOC_DISTANCES_KIND_HETEROGENEOUS_TYPES) {
-    errno = EINVAL;
-    goto err;
-  }
-
-  dist = calloc(1, sizeof(*dist));
+  struct hwloc_internal_distances_s *dist = calloc(1, sizeof(*dist));
   if (!dist)
     goto err;
 
-  if (name)
-    dist->name = strdup(name); /* ignore failure */
-
-  dist->unique_type = unique_type;
-  dist->different_types = different_types;
+  dist->type = type;
   dist->nbobjs = nbobjs;
   dist->kind = kind;
-  dist->iflags = iflags;
-
-  assert(!!(iflags & HWLOC_INTERNAL_DIST_FLAG_OBJS_VALID) == !!objs);
 
   if (!objs) {
     assert(indexes);
@@ -291,16 +220,18 @@ hwloc_internal_distances__add(hwloc_topology_t topology, const char *name,
     dist->objs = calloc(nbobjs, sizeof(hwloc_obj_t));
     if (!dist->objs)
       goto err_with_dist;
+    dist->objs_are_valid = 0;
 
   } else {
     unsigned i;
     assert(!indexes);
     /* we only have objs, generate the indexes arrays so that we can refresh objs later */
     dist->objs = objs;
+    dist->objs_are_valid = 1;
     dist->indexes = malloc(nbobjs * sizeof(*dist->indexes));
     if (!dist->indexes)
       goto err_with_dist;
-    if (HWLOC_DIST_TYPE_USE_OS_INDEX(dist->unique_type)) {
+    if (dist->type == HWLOC_OBJ_PU || dist->type == HWLOC_OBJ_NUMANODE) {
       for(i=0; i<nbobjs; i++)
 	dist->indexes[i] = objs[i]->os_index;
     } else {
@@ -325,19 +256,16 @@ hwloc_internal_distances__add(hwloc_topology_t topology, const char *name,
  err_with_dist:
   free(dist);
  err:
-  free(different_types);
   free(objs);
   free(indexes);
   free(values);
   return -1;
 }
 
-int hwloc_internal_distances_add_by_index(hwloc_topology_t topology, const char *name,
-					  hwloc_obj_type_t unique_type, hwloc_obj_type_t *different_types, unsigned nbobjs, uint64_t *indexes, uint64_t *values,
+int hwloc_internal_distances_add_by_index(hwloc_topology_t topology,
+					  hwloc_obj_type_t type, unsigned nbobjs, uint64_t *indexes, uint64_t *values,
 					  unsigned long kind, unsigned long flags)
 {
-  unsigned iflags = 0; /* objs not valid */
-
   if (nbobjs < 2) {
     errno = EINVAL;
     goto err;
@@ -351,71 +279,24 @@ int hwloc_internal_distances_add_by_index(hwloc_topology_t topology, const char 
     goto err;
   }
 
-  return hwloc_internal_distances__add(topology, name, unique_type, different_types, nbobjs, NULL, indexes, values, kind, iflags);
+  return hwloc_internal_distances__add(topology, type, nbobjs, NULL, indexes, values, kind);
 
  err:
   free(indexes);
   free(values);
-  free(different_types);
   return -1;
 }
 
-static void
-hwloc_internal_distances_restrict(hwloc_obj_t *objs,
-				  uint64_t *indexes,
-				  uint64_t *values,
-				  unsigned nbobjs, unsigned disappeared);
-
-int hwloc_internal_distances_add(hwloc_topology_t topology, const char *name,
+int hwloc_internal_distances_add(hwloc_topology_t topology,
 				 unsigned nbobjs, hwloc_obj_t *objs, uint64_t *values,
 				 unsigned long kind, unsigned long flags)
 {
-  hwloc_obj_type_t unique_type, *different_types;
-  unsigned i, disappeared = 0;
-  unsigned iflags = HWLOC_INTERNAL_DIST_FLAG_OBJS_VALID;
-
   if (nbobjs < 2) {
     errno = EINVAL;
     goto err;
   }
 
-  /* is there any NULL object? (useful in case of problem during insert in backends) */
-  for(i=0; i<nbobjs; i++)
-    if (!objs[i])
-      disappeared++;
-  if (disappeared) {
-    /* some objects are NULL */
-    if (disappeared == nbobjs) {
-      /* nothing left, drop the matrix */
-      free(objs);
-      free(values);
-      return 0;
-    }
-    /* restrict the matrix */
-    hwloc_internal_distances_restrict(objs, NULL, values, nbobjs, disappeared);
-    nbobjs -= disappeared;
-  }
-
-  unique_type = objs[0]->type;
-  for(i=1; i<nbobjs; i++)
-    if (objs[i]->type != unique_type) {
-      unique_type = HWLOC_OBJ_TYPE_NONE;
-      break;
-    }
-  if (unique_type == HWLOC_OBJ_TYPE_NONE) {
-    /* heterogeneous types */
-    different_types = malloc(nbobjs * sizeof(*different_types));
-    if (!different_types)
-      goto err;
-    for(i=0; i<nbobjs; i++)
-      different_types[i] = objs[i]->type;
-
-  } else {
-    /* homogeneous types */
-    different_types = NULL;
-  }
-
-  if (topology->grouping && (flags & HWLOC_DISTANCES_ADD_FLAG_GROUP) && !different_types) {
+  if (topology->grouping && (flags & HWLOC_DISTANCES_ADD_FLAG_GROUP)) {
     float full_accuracy = 0.f;
     float *accuracies;
     unsigned nbaccuracies;
@@ -429,8 +310,8 @@ int hwloc_internal_distances_add(hwloc_topology_t topology, const char *name,
     }
 
     if (topology->grouping_verbose) {
-      unsigned j;
-      int gp = !HWLOC_DIST_TYPE_USE_OS_INDEX(unique_type);
+      unsigned i, j;
+      int gp = (objs[0]->type != HWLOC_OBJ_NUMANODE && objs[0]->type != HWLOC_OBJ_PU);
       fprintf(stderr, "Trying to group objects using distance matrix:\n");
       fprintf(stderr, "%s", gp ? "gp_index" : "os_index");
       for(j=0; j<nbobjs; j++)
@@ -448,7 +329,7 @@ int hwloc_internal_distances_add(hwloc_topology_t topology, const char *name,
 			       kind, nbaccuracies, accuracies, 1 /* check the first matrice */);
   }
 
-  return hwloc_internal_distances__add(topology, name, unique_type, different_types, nbobjs, objs, NULL, values, kind, iflags);
+  return hwloc_internal_distances__add(topology, objs[0]->type, nbobjs, objs, NULL, values, kind);
 
  err:
   free(objs);
@@ -467,6 +348,7 @@ int hwloc_distances_add(hwloc_topology_t topology,
 			unsigned nbobjs, hwloc_obj_t *objs, hwloc_uint64_t *values,
 			unsigned long kind, unsigned long flags)
 {
+  hwloc_obj_type_t type;
   unsigned i;
   uint64_t *_values;
   hwloc_obj_t *_objs;
@@ -474,10 +356,6 @@ int hwloc_distances_add(hwloc_topology_t topology,
 
   if (nbobjs < 2 || !objs || !values || !topology->is_loaded) {
     errno = EINVAL;
-    return -1;
-  }
-  if (topology->adopted_shmem_addr) {
-    errno = EPERM;
     return -1;
   }
   if ((kind & ~HWLOC_DISTANCES_KIND_ALL)
@@ -490,8 +368,15 @@ int hwloc_distances_add(hwloc_topology_t topology,
 
   /* no strict need to check for duplicates, things shouldn't break */
 
+  type = objs[0]->type;
+  if (type == HWLOC_OBJ_GROUP) {
+    /* not supported yet, would require we save the subkind together with the type. */
+    errno = EINVAL;
+    return -1;
+  }
+
   for(i=1; i<nbobjs; i++)
-    if (!objs[i]) {
+    if (!objs[i] || objs[i]->type != type) {
       errno = EINVAL;
       return -1;
     }
@@ -504,7 +389,7 @@ int hwloc_distances_add(hwloc_topology_t topology,
 
   memcpy(_objs, objs, nbobjs*sizeof(hwloc_obj_t));
   memcpy(_values, values, nbobjs*nbobjs*sizeof(*_values));
-  err = hwloc_internal_distances_add(topology, NULL, nbobjs, _objs, _values, kind, flags);
+  err = hwloc_internal_distances_add(topology, nbobjs, _objs, _values, kind, flags);
   if (err < 0)
     goto out; /* _objs and _values freed in hwloc_internal_distances_add() */
 
@@ -524,9 +409,9 @@ int hwloc_distances_add(hwloc_topology_t topology,
  * Refresh objects in distances
  */
 
-static hwloc_obj_t hwloc_find_obj_by_depth_and_gp_index(hwloc_topology_t topology, unsigned depth, uint64_t gp_index)
+static hwloc_obj_t hwloc_find_obj_by_type_and_gp_index(hwloc_topology_t topology, hwloc_obj_type_t type, uint64_t gp_index)
 {
-  hwloc_obj_t obj = hwloc_get_obj_by_depth(topology, depth, 0);
+  hwloc_obj_t obj = hwloc_get_obj_by_type(topology, type, 0);
   while (obj) {
     if (obj->gp_index == gp_index)
       return obj;
@@ -535,31 +420,12 @@ static hwloc_obj_t hwloc_find_obj_by_depth_and_gp_index(hwloc_topology_t topolog
   return NULL;
 }
 
-static hwloc_obj_t hwloc_find_obj_by_type_and_gp_index(hwloc_topology_t topology, hwloc_obj_type_t type, uint64_t gp_index)
-{
-  int depth = hwloc_get_type_depth(topology, type);
-  if (depth == HWLOC_TYPE_DEPTH_UNKNOWN)
-    return NULL;
-  if (depth == HWLOC_TYPE_DEPTH_MULTIPLE) {
-    int topodepth = hwloc_topology_get_depth(topology);
-    for(depth=0; depth<topodepth; depth++) {
-      if (hwloc_get_depth_type(topology, depth) == type) {
-	hwloc_obj_t obj = hwloc_find_obj_by_depth_and_gp_index(topology, depth, gp_index);
-	if (obj)
-	  return obj;
-      }
-    }
-    return NULL;
-  }
-  return hwloc_find_obj_by_depth_and_gp_index(topology, depth, gp_index);
-}
-
 static void
-hwloc_internal_distances_restrict(hwloc_obj_t *objs,
-				  uint64_t *indexes,
-				  uint64_t *values,
-				  unsigned nbobjs, unsigned disappeared)
+hwloc_internal_distances_restrict(struct hwloc_internal_distances_s *dist,
+				  hwloc_obj_t *objs,
+				  unsigned disappeared)
 {
+  unsigned nbobjs = dist->nbobjs;
   unsigned i, newi;
   unsigned j, newj;
 
@@ -567,7 +433,7 @@ hwloc_internal_distances_restrict(hwloc_obj_t *objs,
     if (objs[i]) {
       for(j=0, newj=0; j<nbobjs; j++)
 	if (objs[j]) {
-	  values[newi*(nbobjs-disappeared)+newj] = values[i*nbobjs+j];
+	  dist->values[newi*(nbobjs-disappeared)+newj] = dist->values[i*nbobjs+j];
 	  newj++;
 	}
       newi++;
@@ -576,25 +442,25 @@ hwloc_internal_distances_restrict(hwloc_obj_t *objs,
   for(i=0, newi=0; i<nbobjs; i++)
     if (objs[i]) {
       objs[newi] = objs[i];
-      if (indexes)
-	indexes[newi] = indexes[i];
+      dist->indexes[newi] = dist->indexes[i];
       newi++;
     }
+
+  dist->nbobjs -= disappeared;
 }
 
 static int
 hwloc_internal_distances_refresh_one(hwloc_topology_t topology,
 				     struct hwloc_internal_distances_s *dist)
 {
-  hwloc_obj_type_t unique_type = dist->unique_type;
-  hwloc_obj_type_t *different_types = dist->different_types;
+  hwloc_obj_type_t type = dist->type;
   unsigned nbobjs = dist->nbobjs;
   hwloc_obj_t *objs = dist->objs;
   uint64_t *indexes = dist->indexes;
   unsigned disappeared = 0;
   unsigned i;
 
-  if (dist->iflags & HWLOC_INTERNAL_DIST_FLAG_OBJS_VALID)
+  if (dist->objs_are_valid)
     return 0;
 
   for(i=0; i<nbobjs; i++) {
@@ -602,16 +468,12 @@ hwloc_internal_distances_refresh_one(hwloc_topology_t topology,
     /* TODO use cpuset/nodeset to find pus/numas from the root?
      * faster than traversing the entire level?
      */
-    if (HWLOC_DIST_TYPE_USE_OS_INDEX(unique_type)) {
-      if (unique_type == HWLOC_OBJ_PU)
-	obj = hwloc_get_pu_obj_by_os_index(topology, (unsigned) indexes[i]);
-      else if (unique_type == HWLOC_OBJ_NUMANODE)
-	obj = hwloc_get_numanode_obj_by_os_index(topology, (unsigned) indexes[i]);
-      else
-	abort();
-    } else {
-      obj = hwloc_find_obj_by_type_and_gp_index(topology, different_types ? different_types[i] : unique_type, indexes[i]);
-    }
+    if (type == HWLOC_OBJ_PU)
+      obj = hwloc_get_pu_obj_by_os_index(topology, (unsigned) indexes[i]);
+    else if (type == HWLOC_OBJ_NUMANODE)
+      obj = hwloc_get_numanode_obj_by_os_index(topology, (unsigned) indexes[i]);
+    else
+      obj = hwloc_find_obj_by_type_and_gp_index(topology, type, indexes[i]);
     objs[i] = obj;
     if (!obj)
       disappeared++;
@@ -621,12 +483,10 @@ hwloc_internal_distances_refresh_one(hwloc_topology_t topology,
     /* became useless, drop */
     return -1;
 
-  if (disappeared) {
-    hwloc_internal_distances_restrict(objs, dist->indexes, dist->values, nbobjs, disappeared);
-    dist->nbobjs -= disappeared;
-  }
+  if (disappeared)
+    hwloc_internal_distances_restrict(dist, objs, disappeared);
 
-  dist->iflags |= HWLOC_INTERNAL_DIST_FLAG_OBJS_VALID;
+  dist->objs_are_valid = 1;
   return 0;
 }
 
@@ -660,64 +520,32 @@ hwloc_internal_distances_invalidate_cached_objs(hwloc_topology_t topology)
 {
   struct hwloc_internal_distances_s *dist;
   for(dist = topology->first_dist; dist; dist = dist->next)
-    dist->iflags &= ~HWLOC_INTERNAL_DIST_FLAG_OBJS_VALID;
+    dist->objs_are_valid = 0;
 }
 
 /******************************************************
  * User API for getting distances
  */
 
-/* what we actually allocate for user queries, even if we only
- * return the distances part of it.
- */
-struct hwloc_distances_container_s {
-  unsigned id;
-  struct hwloc_distances_s distances;
-};
-
-#define HWLOC_DISTANCES_CONTAINER_OFFSET ((char*)&((struct hwloc_distances_container_s*)NULL)->distances - (char*)NULL)
-#define HWLOC_DISTANCES_CONTAINER(_d) (struct hwloc_distances_container_s *) ( ((char*)_d) - HWLOC_DISTANCES_CONTAINER_OFFSET )
-
-static struct hwloc_internal_distances_s *
-hwloc__internal_distances_from_public(hwloc_topology_t topology, struct hwloc_distances_s *distances)
-{
-  struct hwloc_distances_container_s *cont = HWLOC_DISTANCES_CONTAINER(distances);
-  struct hwloc_internal_distances_s *dist;
-  for(dist = topology->first_dist; dist; dist = dist->next)
-    if (dist->id == cont->id)
-      return dist;
-  return NULL;
-}
-
 void
 hwloc_distances_release(hwloc_topology_t topology __hwloc_attribute_unused,
 			struct hwloc_distances_s *distances)
 {
-  struct hwloc_distances_container_s *cont = HWLOC_DISTANCES_CONTAINER(distances);
   free(distances->values);
   free(distances->objs);
-  free(cont);
-}
-
-const char *
-hwloc_distances_get_name(hwloc_topology_t topology, struct hwloc_distances_s *distances)
-{
-  struct hwloc_internal_distances_s *dist = hwloc__internal_distances_from_public(topology, distances);
-  return dist ? dist->name : NULL;
+  free(distances);
 }
 
 static struct hwloc_distances_s *
 hwloc_distances_get_one(hwloc_topology_t topology __hwloc_attribute_unused,
 			struct hwloc_internal_distances_s *dist)
 {
-  struct hwloc_distances_container_s *cont;
   struct hwloc_distances_s *distances;
   unsigned nbobjs;
 
-  cont = malloc(sizeof(*cont));
-  if (!cont)
+  distances = malloc(sizeof(*distances));
+  if (!distances)
     return NULL;
-  distances = &cont->distances;
 
   nbobjs = distances->nbobjs = dist->nbobjs;
 
@@ -732,20 +560,18 @@ hwloc_distances_get_one(hwloc_topology_t topology __hwloc_attribute_unused,
   memcpy(distances->values, dist->values, nbobjs*nbobjs*sizeof(*distances->values));
 
   distances->kind = dist->kind;
-
-  cont->id = dist->id;
   return distances;
 
  out_with_objs:
   free(distances->objs);
  out:
-  free(cont);
+  free(distances);
   return NULL;
 }
 
 static int
 hwloc__distances_get(hwloc_topology_t topology,
-		     const char *name, hwloc_obj_type_t type,
+		     hwloc_obj_type_t type,
 		     unsigned *nrp, struct hwloc_distances_s **distancesp,
 		     unsigned long kind, unsigned long flags __hwloc_attribute_unused)
 {
@@ -776,10 +602,7 @@ hwloc__distances_get(hwloc_topology_t topology,
     unsigned long kind_from = kind & HWLOC_DISTANCES_KIND_FROM_ALL;
     unsigned long kind_means = kind & HWLOC_DISTANCES_KIND_MEANS_ALL;
 
-    if (name && (!dist->name || strcmp(name, dist->name)))
-      continue;
-
-    if (type != HWLOC_OBJ_TYPE_NONE && type != dist->unique_type)
+    if (type != HWLOC_OBJ_TYPE_NONE && type != dist->type)
       continue;
 
     if (kind_from && !(kind_from & dist->kind))
@@ -817,7 +640,7 @@ hwloc_distances_get(hwloc_topology_t topology,
     return -1;
   }
 
-  return hwloc__distances_get(topology, NULL, HWLOC_OBJ_TYPE_NONE, nrp, distancesp, kind, flags);
+  return hwloc__distances_get(topology, HWLOC_OBJ_TYPE_NONE, nrp, distancesp, kind, flags);
 }
 
 int
@@ -832,40 +655,14 @@ hwloc_distances_get_by_depth(hwloc_topology_t topology, int depth,
     return -1;
   }
 
-  /* FIXME: passing the depth of a group level may return group distances at a different depth */
+  /* switch back to types since we don't support groups for now */
   type = hwloc_get_depth_type(topology, depth);
   if (type == (hwloc_obj_type_t)-1) {
     errno = EINVAL;
     return -1;
   }
 
-  return hwloc__distances_get(topology, NULL, type, nrp, distancesp, kind, flags);
-}
-
-int
-hwloc_distances_get_by_name(hwloc_topology_t topology, const char *name,
-			    unsigned *nrp, struct hwloc_distances_s **distancesp,
-			    unsigned long flags)
-{
-  if (flags || !topology->is_loaded) {
-    errno = EINVAL;
-    return -1;
-  }
-
-  return hwloc__distances_get(topology, name, HWLOC_OBJ_TYPE_NONE, nrp, distancesp, HWLOC_DISTANCES_KIND_ALL, flags);
-}
-
-int
-hwloc_distances_get_by_type(hwloc_topology_t topology, hwloc_obj_type_t type,
-			    unsigned *nrp, struct hwloc_distances_s **distancesp,
-			    unsigned long kind, unsigned long flags)
-{
-  if (flags || !topology->is_loaded) {
-    errno = EINVAL;
-    return -1;
-  }
-
-  return hwloc__distances_get(topology, NULL, type, nrp, distancesp, kind, flags);
+  return hwloc__distances_get(topology, type, nrp, distancesp, kind, flags);
 }
 
 /******************************************************
@@ -1026,14 +823,10 @@ hwloc__groups_by_distances(struct hwloc_topology *topology,
 			   float *accuracies,
 			   int needcheck)
 {
-  unsigned *groupids;
+  HWLOC_VLA(unsigned, groupids, nbobjs);
   unsigned nbgroups = 0;
   unsigned i,j;
   int verbose = topology->grouping_verbose;
-  hwloc_obj_t *groupobjs;
-  unsigned * groupsizes;
-  uint64_t *groupvalues;
-  unsigned failed = 0;
 
   if (nbobjs <= 2)
       return;
@@ -1041,10 +834,6 @@ hwloc__groups_by_distances(struct hwloc_topology *topology,
   if (!(kind & HWLOC_DISTANCES_KIND_MEANS_LATENCY))
     /* don't know use to use those for grouping */
     /* TODO hwloc__find_groups_by_max_distance() for bandwidth */
-    return;
-
-  groupids = malloc(nbobjs * sizeof(*groupids));
-  if (!groupids)
     return;
 
   for(i=0; i<nbaccuracies; i++) {
@@ -1058,13 +847,13 @@ hwloc__groups_by_distances(struct hwloc_topology *topology,
       break;
   }
   if (!nbgroups)
-    goto out_with_groupids;
+    return;
 
-  groupobjs = malloc(nbgroups * sizeof(*groupobjs));
-  groupsizes = malloc(nbgroups * sizeof(*groupsizes));
-  groupvalues = malloc(nbgroups * nbgroups * sizeof(*groupvalues));
-  if (!groupobjs || !groupsizes || !groupvalues)
-    goto out_with_groups;
+  {
+      HWLOC_VLA(hwloc_obj_t, groupobjs, nbgroups);
+      HWLOC_VLA(unsigned, groupsizes, nbgroups);
+      HWLOC_VLA(uint64_t, groupvalues, nbgroups*nbgroups);
+      unsigned failed = 0;
 
       /* create new Group objects and record their size */
       memset(&(groupsizes[0]), 0, sizeof(groupsizes[0]) * nbgroups);
@@ -1095,7 +884,7 @@ hwloc__groups_by_distances(struct hwloc_topology *topology,
 
       if (failed)
 	/* don't try to group above if we got a NULL group here, just keep this incomplete level */
-	goto out_with_groups;
+	return;
 
       /* factorize values */
       memset(&(groupvalues[0]), 0, sizeof(groupvalues[0]) * nbgroups * nbgroups);
@@ -1127,11 +916,5 @@ hwloc__groups_by_distances(struct hwloc_topology *topology,
 #endif
 
       hwloc__groups_by_distances(topology, nbgroups, groupobjs, groupvalues, kind, nbaccuracies, accuracies, 0 /* no need to check generated matrix */);
-
- out_with_groups:
-  free(groupobjs);
-  free(groupsizes);
-  free(groupvalues);
- out_with_groupids:
-  free(groupids);
+  }
 }

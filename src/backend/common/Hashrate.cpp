@@ -30,7 +30,6 @@
 
 
 #include "backend/common/Hashrate.h"
-#include "base/io/json/Json.h"
 #include "base/tools/Chrono.h"
 #include "base/tools/Handle.h"
 #include "rapidjson/document.h"
@@ -158,7 +157,13 @@ const char *xmrig::Hashrate::format(double h, char *buf, size_t size)
 
 rapidjson::Value xmrig::Hashrate::normalize(double d)
 {
-    return Json::normalize(d, false);
+    using namespace rapidjson;
+
+    if (!std::isnormal(d)) {
+        return Value(kNullType);
+    }
+
+    return Value(floor(d * 100.0) / 100.0);
 }
 
 

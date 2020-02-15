@@ -1,18 +1,18 @@
 /*
  * Copyright © 2009 CNRS
- * Copyright © 2009-2019 Inria.  All rights reserved.
+ * Copyright © 2009-2018 Inria.  All rights reserved.
  * Copyright © 2009-2011 Université Bordeaux
  * Copyright © 2009-2011 Cisco Systems, Inc.  All rights reserved.
  * See COPYING in top-level directory.
  */
 
-#include "private/autogen/config.h"
-#include "hwloc.h"
-#include "hwloc/plugins.h"
-#include "private/private.h"
-#include "private/misc.h"
-#include "private/xml.h"
-#include "private/debug.h"
+#include <private/autogen/config.h>
+#include <hwloc.h>
+#include <hwloc/plugins.h>
+#include <private/private.h>
+#include <private/misc.h>
+#include <private/xml.h>
+#include <private/debug.h>
 
 #include <string.h>
 #include <assert.h>
@@ -27,8 +27,9 @@
  *******************/
 
 struct hwloc__nolibxml_backend_data_s {
-  size_t buflen; /* size of both buffer, set during backend_init() */
+  size_t buflen; /* size of both buffer and copy buffers, set during backend_init() */
   char *buffer; /* allocated and filled during backend_init() */
+  char *copy; /* allocated during backend_init(), used later during actual parsing */
 };
 
 typedef struct hwloc__nolibxml_import_state_data_s {
@@ -259,10 +260,13 @@ hwloc_nolibxml_look_init(struct hwloc_xml_backend_data_s *bdata,
   struct hwloc__nolibxml_backend_data_s *nbdata = bdata->data;
   unsigned major, minor;
   char *end;
-  char *buffer = nbdata->buffer;
-  char *tagname;
+  char *buffer;
 
   HWLOC_BUILD_ASSERT(sizeof(*nstate) <= sizeof(state->data));
+
+  /* use a copy in the temporary buffer, we may modify during parsing */
+  buffer = nbdata->copy;
+  memcpy(buffer, nbdata->buffer, nbdata->buflen);
 
   /* skip headers */
   while (!strncmp(buffer, "<?xml ", 6) || !strncmp(buffer, "<!DOCTYPE ", 10)) {
@@ -277,17 +281,14 @@ hwloc_nolibxml_look_init(struct hwloc_xml_backend_data_s *bdata,
     bdata->version_major = major;
     bdata->version_minor = minor;
     end = strchr(buffer, '>') + 1;
-    tagname = "topology";
   } else if (!strncmp(buffer, "<topology>", 10)) {
     bdata->version_major = 1;
     bdata->version_minor = 0;
     end = buffer + 10;
-    tagname = "topology";
   } else if (!strncmp(buffer, "<root>", 6)) {
     bdata->version_major = 0;
     bdata->version_minor = 9;
     end = buffer + 6;
-    tagname = "root";
   } else
     goto failed;
 
@@ -300,7 +301,7 @@ hwloc_nolibxml_look_init(struct hwloc_xml_backend_data_s *bdata,
   state->parent = NULL;
   nstate->closed = 0;
   nstate->tagbuffer = end;
-  nstate->tagname = tagname;
+  nstate->tagname = (char *) "topology";
   nstate->attrbuffer = NULL;
   return 0; /* success */
 
@@ -318,6 +319,10 @@ hwloc_nolibxml_free_buffers(struct hwloc_xml_backend_data_s *bdata)
   if (nbdata->buffer) {
     free(nbdata->buffer);
     nbdata->buffer = NULL;
+  }
+  if (nbdata->copy) {
+    free(nbdata->copy);
+    nbdata->copy = NULL;
   }
 }
 
@@ -424,11 +429,19 @@ hwloc_nolibxml_backend_init(struct hwloc_xml_backend_data_s *bdata,
       goto out_with_nbdata;
   }
 
+  /* allocate a temporary copy buffer that we may modify during parsing */
+  nbdata->copy = malloc(nbdata->buflen+1);
+  if (!nbdata->copy)
+    goto out_with_buffer;
+  nbdata->copy[nbdata->buflen] = '\0';
+
   bdata->look_init = hwloc_nolibxml_look_init;
   bdata->look_done = hwloc_nolibxml_look_done;
   bdata->backend_exit = hwloc_nolibxml_backend_exit;
   return 0;
 
+out_with_buffer:
+  free(nbdata->buffer);
 out_with_nbdata:
   free(nbdata);
 out:
@@ -653,7 +666,7 @@ hwloc__nolibxml_export_end_object(hwloc__xml_export_state_t state, const char *n
 }
 
 static void
-hwloc__nolibxml_export_add_content(hwloc__xml_export_state_t state, const char *buffer, size_t length __hwloc_attribute_unused)
+hwloc__nolibxml_export_add_content(hwloc__xml_export_state_t state, const char *buffer, size_t length)
 {
   hwloc__nolibxml_export_state_data_t ndata = (void *) state->data;
   int res;
@@ -665,7 +678,7 @@ hwloc__nolibxml_export_add_content(hwloc__xml_export_state_t state, const char *
   }
   ndata->has_content = 1;
 
-  res = hwloc_snprintf(ndata->buffer, ndata->remaining, "%s", buffer);
+  res = hwloc_snprintf(ndata->buffer, ndata->remaining, buffer, length);
   hwloc__nolibxml_export_update_buffer(ndata, res);
 }
 
@@ -786,7 +799,6 @@ hwloc___nolibxml_prepare_export_diff(hwloc_topology_diff_t diff, const char *ref
   state.new_prop = hwloc__nolibxml_export_new_prop;
   state.add_content = hwloc__nolibxml_export_add_content;
   state.end_object = hwloc__nolibxml_export_end_object;
-  state.global = NULL;
 
   ndata->indent = 0;
   ndata->written = 0;

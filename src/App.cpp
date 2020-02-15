@@ -33,7 +33,6 @@
 #include "base/io/Console.h"
 #include "base/io/log/Log.h"
 #include "base/kernel/Signals.h"
-#include "base/kernel/Platform.h"
 #include "core/config/Config.h"
 #include "core/Controller.h"
 #include "core/Miner.h"
@@ -50,8 +49,6 @@ xmrig::App::App(Process *process)
 
 xmrig::App::~App()
 {
-    Cpu::release();
-
     delete m_signals;
     delete m_console;
     delete m_controller;

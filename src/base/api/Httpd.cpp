@@ -23,9 +23,9 @@
  */
 
 
-#include "base/api/Httpd.h"
 #include "3rdparty/http-parser/http_parser.h"
 #include "base/api/Api.h"
+#include "base/api/Httpd.h"
 #include "base/io/log/Log.h"
 #include "base/net/http/HttpApiResponse.h"
 #include "base/net/http/HttpData.h"
@@ -58,7 +58,9 @@ xmrig::Httpd::Httpd(Base *base) :
 }
 
 
-xmrig::Httpd::~Httpd() = default;
+xmrig::Httpd::~Httpd()
+{
+}
 
 
 bool xmrig::Httpd::start()

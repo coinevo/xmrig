@@ -32,15 +32,11 @@
 #include <utility>
 
 
-#include "crypto/common/HugePagesInfo.h"
-
-
 namespace xmrig
 {
 
 
 class Algorithm;
-class CpuConfig;
 class IRxListener;
 class Job;
 class RxConfig;
@@ -50,21 +46,12 @@ class RxDataset;
 class Rx
 {
 public:
-    static bool init(const Job &job, const RxConfig &config, const CpuConfig &cpu);
+    static bool init(const Job &job, const RxConfig &config, bool hugePages);
     static bool isReady(const Job &job);
-    static HugePagesInfo hugePages();
     static RxDataset *dataset(const Job &job, uint32_t nodeId);
+    static std::pair<uint32_t, uint32_t> hugePages();
     static void destroy();
     static void init(IRxListener *listener);
-
-#   ifdef XMRIG_FIX_RYZEN
-    static void setMainLoopBounds(const std::pair<const void*, const void*>& bounds);
-#   endif
-
-private:
-    static void msrInit(const RxConfig &config);
-    static void msrDestroy();
-    static void setupMainLoopExceptionFrame();
 };
 
 

@@ -78,14 +78,8 @@ xmrig::CudaWorker::CudaWorker(size_t id, const CudaLaunchData &data) :
         break;
     }
 
-    if (!m_runner) {
+    if (!m_runner || !m_runner->init()) {
         return;
-    }
-
-    if (!m_runner->init()) {
-        delete m_runner;
-
-        m_runner = nullptr;
     }
 }
 

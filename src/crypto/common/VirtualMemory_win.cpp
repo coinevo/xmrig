@@ -156,12 +156,6 @@ bool xmrig::VirtualMemory::isHugepagesAvailable()
 }
 
 
-bool xmrig::VirtualMemory::isOneGbPagesAvailable()
-{
-    return false;
-}
-
-
 void *xmrig::VirtualMemory::allocateExecutableMemory(size_t size)
 {
     return VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
@@ -178,12 +172,6 @@ void *xmrig::VirtualMemory::allocateLargePagesMemory(size_t size)
     }
 
     return mem;
-}
-
-
-void *xmrig::VirtualMemory::allocateOneGbPagesMemory(size_t)
-{
-    return nullptr;
 }
 
 
@@ -230,12 +218,6 @@ bool xmrig::VirtualMemory::allocateLargePagesMemory()
         return true;
     }
 
-    return false;
-}
-
-bool xmrig::VirtualMemory::allocateOneGbPagesMemory()
-{
-    m_scratchpad = nullptr;
     return false;
 }
 

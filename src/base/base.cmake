@@ -12,7 +12,6 @@ set(HEADERS_BASE
     src/base/kernel/config/BaseConfig.h
     src/base/kernel/config/BaseTransform.h
     src/base/kernel/Entry.h
-    src/base/kernel/Env.h
     src/base/kernel/interfaces/IBaseListener.h
     src/base/kernel/interfaces/IClient.h
     src/base/kernel/interfaces/IClientListener.h
@@ -67,7 +66,6 @@ set(SOURCES_BASE
     src/base/kernel/config/BaseConfig.cpp
     src/base/kernel/config/BaseTransform.cpp
     src/base/kernel/Entry.cpp
-    src/base/kernel/Env.cpp
     src/base/kernel/Platform.cpp
     src/base/kernel/Process.cpp
     src/base/kernel/Signals.cpp
@@ -168,16 +166,4 @@ else()
     set(SOURCES_BASE_HTTP "")
     remove_definitions(/DXMRIG_FEATURE_HTTP)
     remove_definitions(/DXMRIG_FEATURE_API)
-endif()
-
-
-if (WITH_ENV_VARS AND CMAKE_CXX_COMPILER_ID MATCHES GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
-    set(WITH_ENV_VARS OFF)
-endif()
-
-
-if (WITH_ENV_VARS)
-    add_definitions(/DXMRIG_FEATURE_ENV)
-else()
-    remove_definitions(/DXMRIG_FEATURE_ENV)
 endif()

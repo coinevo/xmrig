@@ -127,7 +127,7 @@ private:
             return config.release();
         }
 
-        chain.addFile(Process::location(Process::ExeLocation, "config.json"));
+        chain.addFile(process->location(Process::ExeLocation, "config.json"));
 
         if (read(chain, config)) {
             return config.release();
@@ -176,8 +176,12 @@ int xmrig::Base::init()
 
     Platform::init(config()->userAgent());
 
+#   ifndef XMRIG_PROXY_PROJECT
+    Platform::setProcessPriority(config()->cpu().priority());
+#   endif
+
     if (isBackground()) {
-        Log::setBackground(true);
+        Log::background = true;
     }
     else {
         Log::add(new ConsoleLog());

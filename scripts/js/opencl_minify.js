@@ -2,8 +2,7 @@
 
 function opencl_minify(input)
 {
-    let out = input.replace(/\r/g, '');
-    out = out.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''); // comments
+    let out = input.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');  // comments
     out = out.replace(/^#\s+/gm, '#');        // macros with spaces
     out = out.replace(/\n{2,}/g, '\n');       // empty lines
     out = out.replace(/^\s+/gm, '');          // leading whitespace
@@ -11,7 +10,7 @@ function opencl_minify(input)
 
     let array = out.split('\n').map(line => {
         if (line[0] === '#') {
-            return line;
+            return line
         }
 
         line = line.replace(/, /g, ',');

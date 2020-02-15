@@ -40,19 +40,12 @@
 constexpr size_t oneGiB = 1024 * 1024 * 1024;
 
 
-cl_mem xmrig::OclSharedData::createBuffer(cl_context context, size_t size, size_t &offset, size_t limit)
+cl_mem xmrig::OclSharedData::createBuffer(cl_context context, size_t size, size_t &offset)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    const size_t pos = offset + (size * m_offset);
-    size             = std::max(size * m_threads, oneGiB);
-
-    if (size > limit) {
-        return nullptr;
-    }
-
-    offset = pos;
-    ++m_offset;
+    offset += size * m_offset++;
+    size   = std::max(size * m_threads, oneGiB);
 
     if (!m_buffer) {
         m_buffer = OclLib::createBuffer(context, CL_MEM_READ_WRITE, size);

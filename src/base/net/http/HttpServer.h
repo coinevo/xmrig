@@ -28,12 +28,11 @@
 #define XMRIG_HTTPSERVER_H
 
 
-using http_parser           = struct http_parser;
-using http_parser_settings  = struct http_parser_settings;
+typedef struct http_parser http_parser;
+typedef struct http_parser_settings http_parser_settings;
 
 
 #include "base/kernel/interfaces/ITcpServerListener.h"
-#include "base/tools/Object.h"
 
 
 namespace xmrig {
@@ -45,8 +44,6 @@ class IHttpListener;
 class HttpServer : public ITcpServerListener
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE_DEFAULT(HttpServer)
-
     HttpServer(IHttpListener *listener);
     ~HttpServer() override;
 

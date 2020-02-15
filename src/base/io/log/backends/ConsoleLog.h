@@ -54,7 +54,7 @@ private:
 
     uv_tty_t *m_tty = nullptr;
 
-#   ifdef XMRIG_OS_WIN
+#   ifdef _WIN32
     bool isWritable() const;
 
     uv_stream_t *m_stream = nullptr;

@@ -29,8 +29,6 @@
 
 
 #include "base/tools/Object.h"
-#include "crypto/common/HugePagesInfo.h"
-#include "crypto/rx/RxConfig.h"
 #include "crypto/rx/RxSeed.h"
 
 
@@ -54,20 +52,14 @@ class RxDataset;
 class RxQueueItem
 {
 public:
-    RxQueueItem(const RxSeed &seed, const std::vector<uint32_t> &nodeset, uint32_t threads, bool hugePages, bool oneGbPages, RxConfig::Mode mode, int priority) :
+    RxQueueItem(const RxSeed &seed, const std::vector<uint32_t> &nodeset, uint32_t threads, bool hugePages) :
         hugePages(hugePages),
-        oneGbPages(oneGbPages),
-        priority(priority),
-        mode(mode),
         seed(seed),
         nodeset(nodeset),
         threads(threads)
     {}
 
     const bool hugePages;
-    const bool oneGbPages;
-    const int priority;
-    const RxConfig::Mode mode;
     const RxSeed seed;
     const std::vector<uint32_t> nodeset;
     const uint32_t threads;
@@ -84,8 +76,8 @@ public:
 
     bool isReady(const Job &job);
     RxDataset *dataset(const Job &job, uint32_t nodeId);
-    HugePagesInfo hugePages();
-    void enqueue(const RxSeed &seed, const std::vector<uint32_t> &nodeset, uint32_t threads, bool hugePages, bool oneGbPages, RxConfig::Mode mode, int priority);
+    std::pair<uint32_t, uint32_t> hugePages();
+    void enqueue(const RxSeed &seed, const std::vector<uint32_t> &nodeset, uint32_t threads, bool hugePages);
 
 private:
     enum State {

@@ -79,8 +79,7 @@ static const char *states[] = {
 
 xmrig::Client::Client(int id, const char *agent, IClientListener *listener) :
     BaseClient(id, listener),
-    m_agent(agent),
-    m_sendBuf(1024)
+    m_agent(agent)
 {
     m_key = m_storage.add(this);
     m_dns = new Dns(this);
@@ -159,18 +158,13 @@ int64_t xmrig::Client::send(const rapidjson::Value &obj)
     obj.Accept(writer);
 
     const size_t size = buffer.GetSize();
-    if (size > kMaxSendBufferSize) {
-        LOG_ERR("[%s] send failed: \"max send buffer size exceeded: %zu\"", url(), size);
+    if (size > (sizeof(m_sendBuf) - 2)) {
+        LOG_ERR("[%s] send failed: \"send buffer overflow: %zu > %zu\"", url(), size, (sizeof(m_sendBuf) - 2));
         close();
-
         return -1;
     }
 
-    if (size > (m_sendBuf.size() - 2)) {
-        m_sendBuf.resize(((size + 1) / 1024 + 1) * 1024);
-    }
-
-    memcpy(m_sendBuf.data(), buffer.GetString(), size);
+    memcpy(m_sendBuf, buffer.GetString(), size);
     m_sendBuf[size]     = '\n';
     m_sendBuf[size + 1] = '\0';
 
@@ -192,8 +186,8 @@ int64_t xmrig::Client::submit(const JobResult &result)
     const char *nonce = result.nonce;
     const char *data  = result.result;
 #   else
-    char *nonce = m_sendBuf.data();
-    char *data  = m_sendBuf.data() + 16;
+    char *nonce = m_sendBuf;
+    char *data  = m_sendBuf + 16;
 
     Buffer::toHex(reinterpret_cast<const char*>(&result.nonce), 4, nonce);
     nonce[8] = '\0';
@@ -344,10 +338,6 @@ bool xmrig::Client::isCriticalError(const char *message)
         return true;
     }
 
-    if (strncasecmp(message, "Invalid job id", 14) == 0) {
-        return true;
-    }
-
     return false;
 }
 
@@ -466,7 +456,11 @@ bool xmrig::Client::send(BIO *bio)
 
     bool result = false;
     if (state() == ConnectedState && uv_is_writable(m_stream)) {
-        result = write(buf);
+        result = uv_try_write(m_stream, &buf, 1) > 0;
+
+        if (!result) {
+            close();
+        }
     }
     else {
         LOG_DEBUG_ERR("[%s] send failed, invalid state: %d", url(), m_state);
@@ -507,23 +501,6 @@ bool xmrig::Client::verifyAlgorithm(const Algorithm &algorithm, const char *algo
 }
 
 
-bool xmrig::Client::write(const uv_buf_t &buf)
-{
-    const int rc = uv_try_write(m_stream, &buf, 1);
-    if (static_cast<size_t>(rc) == buf.len) {
-        return true;
-    }
-
-    if (!isQuiet()) {
-        LOG_ERR("[%s] write error: \"%s\"", url(), uv_strerror(rc));
-    }
-
-    close();
-
-    return false;
-}
-
-
 int xmrig::Client::resolve(const String &host)
 {
     setState(HostLookupState);
@@ -548,11 +525,11 @@ int xmrig::Client::resolve(const String &host)
 
 int64_t xmrig::Client::send(size_t size)
 {
-    LOG_DEBUG("[%s] send (%d bytes): \"%.*s\"", url(), size, static_cast<int>(size) - 1, m_sendBuf.data());
+    LOG_DEBUG("[%s] send (%d bytes): \"%.*s\"", url(), size, static_cast<int>(size) - 1, m_sendBuf);
 
 #   ifdef XMRIG_FEATURE_TLS
     if (isTLS()) {
-        if (!m_tls->send(m_sendBuf.data(), size)) {
+        if (!m_tls->send(m_sendBuf, size)) {
             return -1;
         }
     }
@@ -564,9 +541,10 @@ int64_t xmrig::Client::send(size_t size)
             return -1;
         }
 
-        uv_buf_t buf = uv_buf_init(m_sendBuf.data(), (unsigned int) size);
+        uv_buf_t buf = uv_buf_init(m_sendBuf, (unsigned int) size);
 
-        if (!write(buf)) {
+        if (uv_try_write(m_stream, &buf, 1) < 0) {
+            close();
             return -1;
         }
     }
@@ -580,7 +558,7 @@ void xmrig::Client::connect(sockaddr *addr)
 {
     setState(ConnectingState);
 
-    auto req = new uv_connect_t;
+    uv_connect_t *req = new uv_connect_t;
     req->data = m_storage.ptr(m_key);
 
     m_socket = new uv_tcp_t;
@@ -624,12 +602,12 @@ void xmrig::Client::login()
     auto &allocator = doc.GetAllocator();
 
     Value params(kObjectType);
-    params.AddMember("login", m_user.toJSON(),     allocator);
-    params.AddMember("pass",  m_password.toJSON(), allocator);
+    params.AddMember("login", m_pool.user().toJSON(),     allocator);
+    params.AddMember("pass",  m_pool.password().toJSON(), allocator);
     params.AddMember("agent", StringRef(m_agent),         allocator);
 
-    if (!m_rigId.isNull()) {
-        params.AddMember("rigid", m_rigId.toJSON(), allocator);
+    if (!m_pool.rigId().isNull()) {
+        params.AddMember("rigid", m_pool.rigId().toJSON(), allocator);
     }
 
     m_listener->onLogin(this, doc, params);
@@ -813,7 +791,7 @@ void xmrig::Client::parseResponse(int64_t id, const rapidjson::Value &result, co
 
 void xmrig::Client::ping()
 {
-    send(snprintf(m_sendBuf.data(), m_sendBuf.size(), "{\"id\":%" PRId64 ",\"jsonrpc\":\"2.0\",\"method\":\"keepalived\",\"params\":{\"id\":\"%s\"}}\n", m_sequence, m_rpcId.data()));
+    send(snprintf(m_sendBuf, sizeof(m_sendBuf), "{\"id\":%" PRId64 ",\"jsonrpc\":\"2.0\",\"method\":\"keepalived\",\"params\":{\"id\":\"%s\"}}\n", m_sequence, m_rpcId.data()));
 
     m_keepAlive = 0;
 }
@@ -821,7 +799,7 @@ void xmrig::Client::ping()
 
 void xmrig::Client::read(ssize_t nread)
 {
-    const auto size = static_cast<size_t>(nread);
+    const size_t size = static_cast<size_t>(nread);
 
     if (nread > 0 && size > m_recvBuf.available()) {
         nread = UV_ENOBUFS;
@@ -881,7 +859,7 @@ void xmrig::Client::reconnect()
 
 void xmrig::Client::setState(SocketState state)
 {
-    LOG_DEBUG("[%s] state: \"%s\" -> \"%s\"", url(), states[m_state], states[state]);
+    LOG_DEBUG("[%s] state: \"%s\"", url(), states[state]);
 
     if (m_state == state) {
         return;
@@ -975,12 +953,6 @@ void xmrig::Client::onConnect(uv_connect_t *req, int status)
 
         delete req;
         client->close();
-        return;
-    }
-
-    if (client->state() == ConnectedState) {
-        LOG_ERR("[%s] already connected");
-
         return;
     }
 

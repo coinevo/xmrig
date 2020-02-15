@@ -15,8 +15,7 @@
 #ifndef HWLOC_LINUX_H
 #define HWLOC_LINUX_H
 
-#include "hwloc.h"
-
+#include <hwloc.h>
 #include <stdio.h>
 
 

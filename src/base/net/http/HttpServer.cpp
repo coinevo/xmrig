@@ -49,7 +49,7 @@ xmrig::HttpServer::~HttpServer()
 
 void xmrig::HttpServer::onConnection(uv_stream_t *stream, uint16_t)
 {
-    auto ctx = new HttpContext(HTTP_REQUEST, m_listener);
+    HttpContext *ctx = new HttpContext(HTTP_REQUEST, m_listener);
     uv_accept(stream, ctx->stream());
 
     uv_read_start(ctx->stream(),
@@ -65,11 +65,11 @@ void xmrig::HttpServer::onConnection(uv_stream_t *stream, uint16_t)
         },
         [](uv_stream_t *tcp, ssize_t nread, const uv_buf_t *buf)
         {
-            auto ctx = static_cast<HttpContext*>(tcp->data);
+            HttpContext *ctx = static_cast<HttpContext*>(tcp->data);
 
             if (nread >= 0) {
-                const auto size   = static_cast<size_t>(nread);
-                const auto parsed = ctx->parse(buf->base, size);
+                const size_t size   = static_cast<size_t>(nread);
+                const size_t parsed = ctx->parse(buf->base, size);
 
                 if (parsed < size) {
                     ctx->close();

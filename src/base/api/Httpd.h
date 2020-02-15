@@ -26,12 +26,11 @@
 #define XMRIG_HTTPD_H
 
 
-#include <cstdint>
+#include <stdint.h>
 
 
 #include "base/kernel/interfaces/IBaseListener.h"
 #include "base/kernel/interfaces/IHttpListener.h"
-#include "base/tools/Object.h"
 
 
 namespace xmrig {
@@ -45,8 +44,6 @@ class TcpServer;
 class Httpd : public IBaseListener, public IHttpListener
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE_DEFAULT(Httpd)
-
     Httpd(Base *base);
     ~Httpd() override;
 

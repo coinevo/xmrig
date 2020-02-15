@@ -36,8 +36,6 @@ namespace xmrig {
 
 
 static bool generated           = false;
-static const char *kBfactorHint = "bfactor-hint";
-static const char *kBsleepHint  = "bsleep-hint";
 static const char *kDevicesHint = "devices-hint";
 static const char *kEnabled     = "enabled";
 static const char *kLoader      = "loader";
@@ -118,8 +116,6 @@ void xmrig::CudaConfig::read(const rapidjson::Value &value)
     if (value.IsObject()) {
         m_enabled   = Json::getBool(value, kEnabled, m_enabled);
         m_loader    = Json::getString(value, kLoader);
-        m_bfactor   = std::min(Json::getUint(value, kBfactorHint, m_bfactor), 12u);
-        m_bsleep    = Json::getUint(value, kBsleepHint, m_bsleep);
 
         setDevicesHint(Json::getString(value, kDevicesHint));
 
